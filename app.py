@@ -22,10 +22,23 @@ def send_to_google_chat(full_url_g, key_g, token_g, text, phone, name, audio_url
     
     # בניית גוף ההודעה
     message_lines = [
-        f"📝 *הודעה טלפונית חדשה מהזירה הגרודנאית*",
+        f"📝 *הודעה מהזירה*",
         f"💬 תוכן: {text}",
         f"📞 נשלח מטלפון: {phone}"
     ]
+    
+    # הוספת קישור שמע במידה וקיים
+    if audio_url:
+        message_lines.append(f"🎧 קישור להקלטה: {audio_url}")
+    
+    formatted_text = "\n".join(message_lines)
+    payload = {"text": formatted_text}
+    
+    try:
+        response = requests.post(webhook_url, json=payload)
+        return response.status_code == 200
+    except:
+        return False
 
 @app.route("/transcribe", methods=["GET"])
 def transcribe():
