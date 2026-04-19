@@ -15,27 +15,17 @@ def recognize_speech(file_path):
     except Exception as e:
         return f"שגיאת תמלול: {str(e)}"
 
-def send_to_google_chat(full_url_g, key_g, token_g, text, phone, name):
-    """שליחת הודעה ל-Google Chat בפורמט הזירה הגרודנאית (ללא קישור שמע לפי בקשתך)"""
+def send_to_google_chat(full_url_g, key_g, token_g, text, phone, name, audio_url=None):
+    """שליחת הודעה ל-Google Chat עם אפשרות לקישור שמע"""
+    # בניית ה-URL המלא עם הפרמטרים
     webhook_url = f"{full_url_g}?key={key_g}&token={token_g}"
     
-    # עיצוב מהגרסה הראשונה (הזירה הגרודנאית)
+    # בניית גוף ההודעה
     message_lines = [
-        f"📢 *הודעה טלפונית חדשה מהזירה הגרודנאית*",
-        f"📞 נשלח מטלפון: {phone}",
-        f"💬 תוכן ההודעה: {text}",
-        f"",
-        f"🇮🇱 _נשלח באמצעות הפיתוח של אבי שיינין_"
+        f"📝 *הודעה טלפונית חדשה מהזירה הגרודנאית*",
+        f"💬 תוכן: {text}",
+        f"📞 נשלח מטלפון: {phone}"
     ]
-    
-    formatted_text = "\n".join(message_lines)
-    payload = {"text": formatted_text}
-    
-    try:
-        response = requests.post(webhook_url, json=payload)
-        return response.status_code == 200
-    except:
-        return False
 
 @app.route("/transcribe", methods=["GET"])
 def transcribe():
@@ -45,10 +35,10 @@ def transcribe():
     phone = request.args.get('ApiPhone', 'לא ידוע')
     name = request.args.get('ApiEnterIDName', 'אורח')
     m_param = request.args.get('M', '7')
-    link_param = request.args.get('link', '') # פרמטר מגרסה 2
+    link_param = request.args.get('link', '') # בדיקה אם לשלוח קישור
     
     # פרמטרים לגוגל צ'אט
-    url_g = request.args.get('url-g', '')
+    url_g = request.args.get('url-g', '') # כאן יופיע כל הקישור עד סימן השאלה
     key_g = request.args.get('key_g', '')
     token_g = request.args.get('token_g', '')
     
@@ -56,7 +46,7 @@ def transcribe():
 
     text_storage = os.path.join(TEMP_DIR, f"trans_{api_id}.txt")
     k_counter_file = os.path.join(TEMP_DIR, f"k_count_{api_id}.txt")
-    audio_path_storage = os.path.join(TEMP_DIR, f"audio_path_{api_id}.txt") # מגרסה 2
+    audio_path_storage = os.path.join(TEMP_DIR, f"audio_path_{api_id}.txt")
 
     def get_k_count():
         if not os.path.exists(k_counter_file): return 1
@@ -77,12 +67,18 @@ def transcribe():
             with open(text_storage, "r", encoding="utf-8") as f:
                 final_text = f.read()
             
-            # ביצוע השליחה בפורמט של גרסה 1 (בלי הקישור בהודעה עצמה)
-            success = send_to_google_chat(url_g, key_g, token_g, final_text, phone, name)
+            # בדיקה אם המשתמש ביקש קישור להקלטה
+            audio_link = None
+            if link_param == "yes" and os.path.exists(audio_path_storage):
+                with open(audio_path_storage, "r") as f:
+                    saved_path = f.read().strip()
+                audio_link = f"https://www.call2all.co.il/ym/api/DownloadFile?token={token}&path=ivr2:{saved_path}"
             
-            # ניקוי (כולל הקובץ מגרסה 2)
-            for f_path in [text_storage, k_counter_file, audio_path_storage]:
-                if os.path.exists(f_path): os.remove(f_path)
+            success = send_to_google_chat(url_g, key_g, token_g, final_text, phone, name, audio_link)
+            
+            # ניקוי
+            for f in [text_storage, k_counter_file, audio_path_storage]:
+                if os.path.exists(f): os.remove(f)
             
             return "id_list_message=m-1452."
 
@@ -94,7 +90,7 @@ def transcribe():
 
     # --- שלב 3: עיבוד הקלטה ---
     if current_k_path:
-        # שמירת נתיב ההקלטה ב"זיכרון" (קובץ טקסט) כמו בגרסה 2
+        # שמירת נתיב ההקלטה למקרה שנצטרך לשלוח קישור בסוף
         with open(audio_path_storage, "w") as f: f.write(current_k_path)
         
         down_url = f"https://www.call2all.co.il/ym/api/DownloadFile?token={token}&path=ivr2:{current_k_path}"
